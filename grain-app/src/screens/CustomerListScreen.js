@@ -15,8 +15,8 @@ import { getCustomers } from '../services/api';
 
 
 const FILTERS = [
-    { key: 'name', label: 'Name', icon: 'person-outline', placeholder: 'Search by name...' },
     { key: 'rcid', label: 'R-CID', icon: 'id-card-outline', placeholder: 'Search by R-CID...' },
+    { key: 'mobile_number', label: 'Mobile No.', icon: 'call-outline', placeholder: 'Search by mobile number...' },
     { key: 'all', label: 'All', icon: 'search-outline', placeholder: 'Search all columns...' },
 ];
 
@@ -37,7 +37,7 @@ export default function CustomerListScreen({ navigation }) {
     const [hasMore, setHasMore] = useState(true);
 
     // ─── Search state ────────────────────────
-    const [activeFilters, setActiveFilters] = useState(['name']);
+    const [activeFilters, setActiveFilters] = useState(['rcid']);
     const [inputText, setInputText] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState('');
     const debounceTimer = useRef(null);
@@ -95,6 +95,17 @@ export default function CustomerListScreen({ navigation }) {
                     keyLower.includes('r cid') ||
                     keyLower.includes('rcid') ||
                     keyLower.includes('r_cid')
+                )) {
+                    return val;
+                }
+                if (fieldName === 'mobile_number' && (
+                    keyLower.includes('mobile') ||
+                    keyLower.includes('phone') ||
+                    keyLower.includes('मोबाईल') ||
+                    keyLower.includes('फोन') ||
+                    keyLower.includes('mob') ||
+                    keyLower.includes('contact') ||
+                    keyLower === 'column 20'
                 )) {
                     return val;
                 }
@@ -167,13 +178,13 @@ export default function CustomerListScreen({ navigation }) {
                 }
 
                 return activeFilters.some((key) => {
-                    if (key === 'name') {
-                        const name = getFieldValue(c, 'name');
-                        return name && String(name).toLowerCase().includes(q);
-                    }
                     if (key === 'rcid') {
                         const rcid = getFieldValue(c, 'rcid');
                         return rcid && String(rcid).toLowerCase().includes(q);
+                    }
+                    if (key === 'mobile_number') {
+                        const mobile = getFieldValue(c, 'mobile_number');
+                        return mobile && String(mobile).toLowerCase().includes(q);
                     }
                     return false;
                 });
@@ -207,6 +218,7 @@ export default function CustomerListScreen({ navigation }) {
     const renderItem = ({ item }) => {
         const name = getFieldValue(item, 'name') || 'N/A';
         const rcid = getFieldValue(item, 'rcid');
+        const mobile = getFieldValue(item, 'mobile_number');
 
         return (
             <TouchableOpacity style={styles.card} activeOpacity={0.6} onPress={() => handlePress(item)}>
@@ -224,6 +236,12 @@ export default function CustomerListScreen({ navigation }) {
                             <View style={[styles.metaBadge, styles.metaBadgeId]}>
                                 <Ionicons name="id-card-outline" size={10} color="#7C3AED" />
                                 <Text style={[styles.metaText, { color: '#7C3AED' }]}>{rcid}</Text>
+                            </View>
+                        )}
+                        {mobile && (
+                            <View style={[styles.metaBadge, styles.metaBadgeMobile]}>
+                                <Ionicons name="call-outline" size={10} color="#059669" />
+                                <Text style={[styles.metaText, { color: '#059669' }]}>{mobile}</Text>
                             </View>
                         )}
                     </View>
@@ -548,6 +566,12 @@ const styles = StyleSheet.create({
     },
     metaBadgeId: {
         backgroundColor: '#F5F3FF',
+        paddingHorizontal: 5,
+        paddingVertical: 1,
+        borderRadius: 4,
+    },
+    metaBadgeMobile: {
+        backgroundColor: '#ECFDF5',
         paddingHorizontal: 5,
         paddingVertical: 1,
         borderRadius: 4,
