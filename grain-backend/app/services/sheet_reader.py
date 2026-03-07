@@ -34,10 +34,18 @@ def _col_index_to_letter(index: int) -> str:
     return result
 
 
+# ─── Rename auto-named columns to meaningful names ──────────
+# Add entries here to rename any auto-named "Column N" to a friendly name.
+COLUMN_RENAMES = {
+    "Column 20": "Mobile Number",
+}
+
+
 def _build_column_headers(raw_headers: List[str]) -> List[Dict[str, Any]]:
     """
     Process raw header values from Row 4.
     - Blank/empty headers → auto-named as "Column 1", "Column 2", etc.
+    - Auto-named columns are then checked against COLUMN_RENAMES for friendly names.
     - Returns list of dicts with: column_index, column_letter, column_name, is_auto_named
     """
     columns = []
@@ -50,6 +58,9 @@ def _build_column_headers(raw_headers: List[str]) -> List[Dict[str, Any]]:
             col_name = f"Column {auto_counter}"
             auto_counter += 1
             is_auto = True
+            # Apply friendly rename if configured
+            if col_name in COLUMN_RENAMES:
+                col_name = COLUMN_RENAMES[col_name]
         else:
             col_name = header_clean
             is_auto = False
