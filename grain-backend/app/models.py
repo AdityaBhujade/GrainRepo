@@ -18,6 +18,7 @@ class ColumnMetadata(Base):
     column_letter = Column(Unicode(5), nullable=True)       # Excel letter (A, B, ... AU)
     column_name = Column(Unicode(255), nullable=False)      # Header text or auto "Column 1"
     is_auto_named = Column(Boolean, default=False)          # True if header was blank
+    bg_color = Column(Unicode(50), nullable=True)           # Hex color code from Google Sheets
     last_synced = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):

@@ -6,9 +6,11 @@ import {
     ActivityIndicator,
     TouchableOpacity,
     StyleSheet,
+    TextInput,
+    Alert,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { getCustomerById } from '../services/api';
+import { getCustomerById, updateCustomer } from '../services/api';
 
 
 export default function CustomerDetailScreen({ route, navigation }) {
@@ -17,6 +19,9 @@ export default function CustomerDetailScreen({ route, navigation }) {
     const [columns, setColumns] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editValues, setEditValues] = useState({});
+    const [saving, setSaving] = useState(false);
 
     const fetchCustomer = async () => {
         try {
@@ -44,9 +49,55 @@ export default function CustomerDetailScreen({ route, navigation }) {
                 customer['owner_name'] ||
                 customer['name'] ||
                 `Customer #${customerId}`;
-            navigation.setOptions({ title: String(name) });
+                
+            navigation.setOptions({ 
+                title: String(name),
+                headerRight: () => (
+                    <TouchableOpacity
+                        style={{ paddingHorizontal: 8 }}
+                        onPress={() => {
+                            if (isEditing) {
+                                setIsEditing(false);
+                            } else {
+                                setEditValues(customer);
+                                setIsEditing(true);
+                            }
+                        }}
+                    >
+                        <Text style={{ color: '#3B82F6', fontSize: 15, fontWeight: '600' }}>
+                            {isEditing ? 'Cancel' : 'Edit'}
+                        </Text>
+                    </TouchableOpacity>
+                ),
+            });
         }
-    }, [customer, navigation]);
+    }, [customer, navigation, isEditing]);
+
+    const handleSave = async () => {
+        const changedFields = {};
+        for (const key in editValues) {
+            if (editValues[key] !== customer[key]) {
+                changedFields[key] = editValues[key] || "";
+            }
+        }
+
+        if (Object.keys(changedFields).length === 0) {
+            setIsEditing(false);
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const response = await updateCustomer(customerId, changedFields);
+            setCustomer(response.data.customer);
+            setIsEditing(false);
+            Alert.alert("Success", "Customer updated successfully!");
+        } catch (err) {
+            Alert.alert("Error", "Failed to update customer. Check connection or backend logs.");
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const safe = (val) =>
         val !== null && val !== undefined && val !== '' ? String(val) : 'N/A';
@@ -87,12 +138,18 @@ export default function CustomerDetailScreen({ route, navigation }) {
     // Filter out internal fields (id, row_number) from display
     const skipKeys = new Set(['id', 'row_number']);
 
+    const getBgColor = (hex) => {
+        if (!hex || hex.toUpperCase() === '#FFFFFF') return null;
+        return hex;
+    };
+
     const tableRows = columns
-        .filter((colName) => !skipKeys.has(colName))
-        .map((colName) => ({
-            label: colName,
-            value: safe(customer[colName]),
+        .filter((col) => !skipKeys.has(col.column_name))
+        .map((col) => ({
+            label: col.column_name,
+            value: safe(customer[col.column_name]),
             icon: 'ellipse-outline',
+            bgColor: getBgColor(col.bg_color),
         }));
 
     // If columns array is empty, fall back to object keys
@@ -105,6 +162,7 @@ export default function CustomerDetailScreen({ route, navigation }) {
                     label: key,
                     value: safe(value),
                     icon: 'ellipse-outline',
+                    bgColor: null,
                 }));
 
     return (
@@ -130,6 +188,7 @@ export default function CustomerDetailScreen({ route, navigation }) {
                                 styles.tableRow,
                                 index % 2 === 0 && styles.tableRowAlt,
                                 index === displayRows.length - 1 && styles.tableRowLast,
+                                row.bgColor && { backgroundColor: row.bgColor },
                             ]}
                         >
                             <View style={styles.labelCell}>
@@ -144,20 +203,39 @@ export default function CustomerDetailScreen({ route, navigation }) {
                                 </Text>
                             </View>
                             <View style={styles.valueCell}>
-                                <Text
-                                    style={[
-                                        styles.valueText,
-                                        row.value === 'N/A' && styles.naText,
-                                    ]}
-                                    numberOfLines={3}
-                                >
-                                    {row.value}
-                                </Text>
+                                {isEditing ? (
+                                    <TextInput
+                                        style={styles.editInput}
+                                        value={editValues[row.label] !== null && editValues[row.label] !== undefined ? String(editValues[row.label]) : ''}
+                                        onChangeText={(text) => setEditValues(prev => ({...prev, [row.label]: text}))}
+                                        placeholder="Value"
+                                    />
+                                ) : (
+                                    <Text
+                                        style={[
+                                            styles.valueText,
+                                            row.value === 'N/A' && styles.naText,
+                                        ]}
+                                        numberOfLines={3}
+                                    >
+                                        {row.value}
+                                    </Text>
+                                )}
                             </View>
                         </View>
                     ))}
                 </View>
             </View>
+            
+            {isEditing && (
+                <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={saving}>
+                    {saving ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                        <Text style={styles.saveButtonText}>Save Changes</Text>
+                    )}
+                </TouchableOpacity>
+            )}
         </ScrollView>
     );
 }
@@ -298,6 +376,30 @@ const styles = StyleSheet.create({
     retryButtonText: {
         color: '#FFFFFF',
         fontSize: 14,
+        fontWeight: '600',
+    },
+    editInput: {
+        borderWidth: 1,
+        borderColor: '#CBD5E1',
+        borderRadius: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        fontSize: 13,
+        color: '#1E293B',
+        backgroundColor: '#FFFFFF',
+    },
+    saveButton: {
+        backgroundColor: '#10B981',
+        marginTop: 8,
+        marginBottom: 24,
+        borderRadius: 8,
+        paddingVertical: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    saveButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
         fontWeight: '600',
     },
 });

@@ -16,9 +16,10 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 # Google Sheets API scopes
+# Use read/write scopes so the sheet_writer can push edits back to the sheet.
 SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets.readonly",
-    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
 ]
 
 
@@ -34,6 +35,16 @@ def _col_index_to_letter(index: int) -> str:
     return result
 
 
+def _rgb_to_hex(color_dict: dict) -> str:
+    """Convert Google Sheets RGB dictionary to hex string."""
+    if not color_dict:
+        return None
+    r = int(color_dict.get('red', 0) * 255)
+    g = int(color_dict.get('green', 0) * 255)
+    b = int(color_dict.get('blue', 0) * 255)
+    return f"#{r:02x}{g:02x}{b:02x}".upper()
+
+
 # ─── Rename auto-named columns to meaningful names ──────────
 # Add entries here to rename any auto-named "Column N" to a friendly name.
 COLUMN_RENAMES = {
@@ -41,7 +52,7 @@ COLUMN_RENAMES = {
 }
 
 
-def _build_column_headers(raw_headers: List[str]) -> List[Dict[str, Any]]:
+def _build_column_headers(raw_headers: List[str], col_colors: List[str] = None) -> List[Dict[str, Any]]:
     """
     Process raw header values from Row 4.
     - Blank/empty headers → auto-named as "Column 1", "Column 2", etc.
@@ -65,11 +76,14 @@ def _build_column_headers(raw_headers: List[str]) -> List[Dict[str, Any]]:
             col_name = header_clean
             is_auto = False
 
+        bg_color = col_colors[i] if col_colors and i < len(col_colors) else None
+
         columns.append({
             "column_index": i,
             "column_letter": _col_index_to_letter(i),
             "column_name": col_name,
             "is_auto_named": is_auto,
+            "bg_color": bg_color,
         })
 
     return columns
@@ -107,9 +121,33 @@ def read_sheet_data() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         logger.warning(f"Sheet has fewer than {settings.header_row} rows — no headers found")
         return [], []
 
+    # ── Fetch formatting for the first data row
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{settings.google_sheet_id}?includeGridData=true&ranges={settings.google_sheet_tab}!A{settings.data_start_row}:ZZ{settings.data_start_row}"
+    col_colors = []
+    try:
+        if hasattr(client, 'request'):
+            res = client.request('get', url)
+            format_data = res.json()
+        elif hasattr(client, 'http_client'):
+            res = client.http_client.request('get', url)
+            format_data = res.json()
+        else:
+            format_data = {}
+            
+        row_format = format_data.get('sheets', [{}])[0].get('data', [{}])[0].get('rowData', [{}])
+        cell_formats = row_format[0].get('values', []) if row_format else []
+        
+        for cell in cell_formats:
+            color_dict = cell.get('effectiveFormat', {}).get('backgroundColor', {})
+            hex_color = _rgb_to_hex(color_dict)
+            # If color is pure white, we might still store #FFFFFF, or None. We'll store it.
+            col_colors.append(hex_color)
+    except Exception as e:
+        logger.error(f"Failed to fetch formatting: {e}")
+
     # ── Extract headers from the configured row (1-indexed → 0-indexed)
     raw_headers = all_values[settings.header_row - 1]
-    columns = _build_column_headers(raw_headers)
+    columns = _build_column_headers(raw_headers, col_colors)
     col_names = [c["column_name"] for c in columns]
 
     logger.info(f"Found {len(columns)} columns from Row {settings.header_row}")

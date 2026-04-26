@@ -46,7 +46,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 DATABASE_URL=mssql+pyodbc://localhost/GrainAppDB?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes
 GOOGLE_SHEET_ID=your_sheet_id
 GOOGLE_SHEET_TAB=Sheet2
-HEADER_ROW=4
+HEADER_ROW=3
 DATA_START_ROW=5
 SYNC_INTERVAL_MINUTES=15
 ```
