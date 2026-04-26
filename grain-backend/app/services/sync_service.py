@@ -44,6 +44,7 @@ def sync_sheet_to_db(db: Session) -> dict:
                 column_letter=col["column_letter"],
                 column_name=col["column_name"],
                 is_auto_named=col["is_auto_named"],
+                bg_color=col.get("bg_color"),
             ))
 
         logger.info(f"Updated {len(columns)} column definitions")

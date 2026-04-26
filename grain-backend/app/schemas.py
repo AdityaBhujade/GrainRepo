@@ -14,6 +14,7 @@ class ColumnSchema(BaseModel):
     column_letter: Optional[str] = None
     column_name: str
     is_auto_named: bool = False
+    bg_color: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -26,6 +27,9 @@ class ColumnsResponse(BaseModel):
 
 # ─── Customer ────────────────────────────────────────────────
 
+class CustomerUpdateRequest(BaseModel):
+    updates: Dict[str, Any]
+
 class CustomerSchema(BaseModel):
     id: int
     row_number: int
@@ -37,12 +41,12 @@ class CustomerSchema(BaseModel):
 
 class CustomersListResponse(BaseModel):
     total: int
-    columns: List[str]
+    columns: List[ColumnSchema]
     data: List[Dict[str, Any]]
 
 
 class CustomerDetailResponse(BaseModel):
-    columns: List[str]
+    columns: List[ColumnSchema]
     customer: Dict[str, Any]
 
 

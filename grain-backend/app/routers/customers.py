@@ -15,6 +15,7 @@ from app.models import Customer, ColumnMetadata, SyncLog
 from app.schemas import (
     CustomersListResponse,
     CustomerDetailResponse,
+    CustomerUpdateRequest,
     ColumnsResponse,
     ColumnSchema,
     SyncResponse,
@@ -22,6 +23,7 @@ from app.schemas import (
     SyncLogSchema,
 )
 from app.services.sync_service import sync_sheet_to_db
+from app.services.sheet_writer import update_customer_in_sheet
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +40,8 @@ def list_customers(
     db: Session = Depends(get_db),
 ):
     """List all customers with their dynamic column data."""
-    # Get column names for the response
     columns_db = db.query(ColumnMetadata).order_by(ColumnMetadata.column_index).all()
-    col_names = [c.column_name for c in columns_db]
+    col_schemas = [ColumnSchema.model_validate(c) for c in columns_db]
 
     # Query customers
     query = db.query(Customer).order_by(Customer.row_number)
@@ -74,7 +75,7 @@ def list_customers(
         row["row_number"] = cust.row_number
         data.append(row)
 
-    return CustomersListResponse(total=total, columns=col_names, data=data)
+    return CustomersListResponse(total=total, columns=col_schemas, data=data)
 
 
 # ─── GET /customers/{id} ────────────────────────────────────
@@ -86,16 +87,36 @@ def get_customer(row_number: int, db: Session = Depends(get_db)):
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    # Get column names
+    # Get column metadata
     columns_db = db.query(ColumnMetadata).order_by(ColumnMetadata.column_index).all()
-    col_names = [c.column_name for c in columns_db]
+    col_schemas = [ColumnSchema.model_validate(c) for c in columns_db]
 
     # Parse customer data
     data = json.loads(customer.data)
     data["id"] = customer.id
     data["row_number"] = customer.row_number
 
-    return CustomerDetailResponse(columns=col_names, customer=data)
+    return CustomerDetailResponse(columns=col_schemas, customer=data)
+
+
+# ─── PATCH /customers/{row_number} ──────────────────────────
+
+@router.patch("/customers/{row_number}", response_model=CustomerDetailResponse)
+def update_customer(row_number: int, request: CustomerUpdateRequest, db: Session = Depends(get_db)):
+    """Update a customer's specific fields in Google Sheets and local DB."""
+    try:
+        updated_data = update_customer_in_sheet(db, row_number, request.updates)
+        
+        # Get column metadata for response
+        columns_db = db.query(ColumnMetadata).order_by(ColumnMetadata.column_index).all()
+        col_schemas = [ColumnSchema.model_validate(c) for c in columns_db]
+        
+        return CustomerDetailResponse(columns=col_schemas, customer=updated_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to update customer: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error while updating sheet.")
 
 
 # ─── GET /columns ────────────────────────────────────────────

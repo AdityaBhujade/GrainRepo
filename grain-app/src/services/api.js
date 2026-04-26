@@ -9,7 +9,7 @@ import { Platform } from 'react-native';
 
 const getBaseURL = () => {
     if (Platform.OS === 'web') return 'http://localhost:8000';
-    if (Platform.OS === 'android') return 'http://10.0.2.2:8000';
+    if (Platform.OS === 'android') return 'http://192.168.1.6:8000'; // your PC's local IP
     return 'http://localhost:8000'; // iOS simulator
 };
 
@@ -28,6 +28,9 @@ export const getCustomers = (params = {}) =>
 
 export const getCustomerById = (rowNumber) =>
     API.get(`/customers/${rowNumber}`);
+
+export const updateCustomer = (rowNumber, updates) =>
+    API.patch(`/customers/${rowNumber}`, { updates });
 
 // ─── Column Metadata ─────────────────────────────────────────
 
