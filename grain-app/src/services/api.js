@@ -8,7 +8,10 @@ import { Platform } from 'react-native';
 // ──────────────────────────────────────────────────────────────
 
 const getBaseURL = () => {
-    if (Platform.OS === 'web') return 'http://localhost:8000';
+    if (Platform.OS === 'web') {
+        // In production behind nginx, /api is proxied to the backend.
+        return process.env.EXPO_PUBLIC_API_BASE_URL || '/api';
+    }
     if (Platform.OS === 'android') return 'http://192.168.1.6:8000'; // your PC's local IP
     return 'http://localhost:8000'; // iOS simulator
 };
