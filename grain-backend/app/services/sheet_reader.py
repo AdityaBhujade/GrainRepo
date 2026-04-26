@@ -65,7 +65,17 @@ def _build_column_headers(raw_headers: List[str], col_colors: List[str] = None) 
     for i, header in enumerate(raw_headers):
         header_clean = str(header).strip() if header is not None else ""
 
-        if header_clean == "" or header_clean == "None":
+        if i == 17: # Column R (0-indexed 17)
+            col_name = "Mobile number 1"
+            is_auto = False
+            if header_clean == "" or header_clean == "None":
+                auto_counter += 1
+        elif i == 35: # Column AJ (0-indexed 35)
+            col_name = "Mobile number 2"
+            is_auto = False
+            if header_clean == "" or header_clean == "None":
+                auto_counter += 1
+        elif header_clean == "" or header_clean == "None":
             col_name = f"Column {auto_counter}"
             auto_counter += 1
             is_auto = True
@@ -147,6 +157,11 @@ def read_sheet_data() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
 
     # ── Extract headers from the configured row (1-indexed → 0-indexed)
     raw_headers = all_values[settings.header_row - 1]
+    
+    # Pad raw_headers to at least 36 to ensure we capture column AJ (index 35)
+    while len(raw_headers) < 36:
+        raw_headers.append("")
+        
     columns = _build_column_headers(raw_headers, col_colors)
     col_names = [c["column_name"] for c in columns]
 

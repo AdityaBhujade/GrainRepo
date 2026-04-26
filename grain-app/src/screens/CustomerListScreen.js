@@ -11,6 +11,7 @@ import {
     Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { getCustomers } from '../services/api';
 
 
@@ -157,7 +158,11 @@ export default function CustomerListScreen({ navigation }) {
         }
     }, [page, loadingMore, hasMore, debouncedQuery]);
 
-    useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
+    useFocusEffect(
+        useCallback(() => {
+            fetchCustomers(true);
+        }, [fetchCustomers])
+    );
 
     // ─── Filter logic ────────────────────────
     useEffect(() => {
