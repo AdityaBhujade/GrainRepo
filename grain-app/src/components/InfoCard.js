@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
 const ACCENT_COLORS = {
     'Customer Info': '#4F8EF7',
@@ -18,6 +18,7 @@ const ICONS = {
 };
 
 export default function InfoCard({ title, data }) {
+    const [isExpanded, setIsExpanded] = useState(false);
     const accent = ACCENT_COLORS[title] || '#4F8EF7';
     const icon = ICONS[title] || '📋';
 
@@ -28,30 +29,41 @@ export default function InfoCard({ title, data }) {
 
             <View style={styles.cardInner}>
                 {/* Header */}
-                <View style={styles.headerRow}>
+                <TouchableOpacity 
+                    style={styles.headerRow}
+                    onPress={() => setIsExpanded(!isExpanded)}
+                    activeOpacity={0.7}
+                >
                     <Text style={styles.icon}>{icon}</Text>
                     <Text style={[styles.title, { color: accent }]}>{title}</Text>
-                </View>
+                    <Text style={[styles.chevron, { color: accent }]}>
+                        {isExpanded ? '▲' : '▼'}
+                    </Text>
+                </TouchableOpacity>
 
-                <View style={styles.divider} />
+                {isExpanded && (
+                    <>
+                        <View style={styles.divider} />
 
-                {/* Data rows */}
-                {data.map((item, index) => (
-                    <View
-                        key={index}
-                        style={[
-                            styles.row,
-                            index < data.length - 1 && styles.rowBorder,
-                        ]}
-                    >
-                        <Text style={styles.label}>{item.label}</Text>
-                        <Text style={styles.value}>
-                            {item.value !== null && item.value !== undefined && item.value !== ''
-                                ? String(item.value)
-                                : 'N/A'}
-                        </Text>
-                    </View>
-                ))}
+                        {/* Data rows */}
+                        {data.map((item, index) => (
+                            <View
+                                key={index}
+                                style={[
+                                    styles.row,
+                                    index < data.length - 1 && styles.rowBorder,
+                                ]}
+                            >
+                                <Text style={styles.label}>{item.label}</Text>
+                                <Text style={styles.value}>
+                                    {item.value !== null && item.value !== undefined && item.value !== ''
+                                        ? String(item.value)
+                                        : 'N/A'}
+                                </Text>
+                            </View>
+                        ))}
+                    </>
+                )}
             </View>
         </View>
     );
@@ -92,6 +104,10 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         textTransform: 'uppercase',
         letterSpacing: 1,
+    },
+    chevron: {
+        fontSize: 12,
+        marginLeft: 'auto',
     },
     divider: {
         height: 1,
