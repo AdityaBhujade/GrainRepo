@@ -22,7 +22,7 @@
       "package": "com.addy28.grainapp"
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [],
