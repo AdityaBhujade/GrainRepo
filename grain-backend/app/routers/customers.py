@@ -2,16 +2,12 @@
 Customer & Column API endpoints.
 """
 
-import json
 import logging
+from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from fastapi import APIRouter, HTTPException, Query
 
-from app.database import get_db
-from app.models import Customer, ColumnMetadata, SyncLog
 from app.schemas import (
     CustomersListResponse,
     CustomerDetailResponse,
@@ -22,12 +18,34 @@ from app.schemas import (
     HealthResponse,
     SyncLogSchema,
 )
-from app.services.sync_service import sync_sheet_to_db
+from app.services.sheet_reader import read_sheet_data
 from app.services.sheet_writer import update_customer_in_sheet
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_sync_logs: List[SyncLogSchema] = []
+_last_sync: Optional[datetime] = None
+
+
+def _record_sync(status: str, message: str, rows_synced: int, columns_synced: int) -> None:
+    global _last_sync
+    now = datetime.utcnow()
+    _last_sync = now
+    _sync_logs.insert(
+        0,
+        SyncLogSchema(
+            id=len(_sync_logs) + 1,
+            synced_at=now,
+            rows_synced=rows_synced,
+            columns_synced=columns_synced,
+            status=status,
+            message=message,
+        ),
+    )
+    if len(_sync_logs) > 100:
+        _sync_logs.pop()
 
 
 # ─── GET /customers ──────────────────────────────────────────
@@ -37,43 +55,35 @@ def list_customers(
     page: int = Query(1, ge=1),
     page_size: int = Query(2000, ge=1, le=5000),
     search: Optional[str] = Query(None, description="Search across all columns"),
-    db: Session = Depends(get_db),
 ):
-    """List all customers with their dynamic column data."""
-    columns_db = db.query(ColumnMetadata).order_by(ColumnMetadata.column_index).all()
-    col_schemas = [ColumnSchema.model_validate(c) for c in columns_db]
+    """List all customers directly from Google Sheets."""
+    columns, rows = read_sheet_data()
+    col_schemas = [ColumnSchema.model_validate(c) for c in columns]
 
-    # Query customers
-    query = db.query(Customer).order_by(Customer.row_number)
-
-    # Optional search — filter rows where any column value contains the search term
+    filtered_rows = rows
     if search:
         search_lower = search.lower()
-        all_customers = query.all()
-        filtered = []
-        for cust in all_customers:
-            data = json.loads(cust.data)
+        filtered_rows = []
+        for row in rows:
             if any(
                 search_lower in str(v).lower()
-                for v in data.values()
+                for k, v in row.items()
+                if k != "_row_number"
                 if v is not None
             ):
-                filtered.append(cust)
-        total = len(filtered)
-        # Manual pagination
-        start = (page - 1) * page_size
-        paginated = filtered[start : start + page_size]
-    else:
-        total = query.count()
-        paginated = query.offset((page - 1) * page_size).limit(page_size).all()
+                filtered_rows.append(row)
 
-    # Build response data
+    total = len(filtered_rows)
+    start = (page - 1) * page_size
+    paginated = filtered_rows[start : start + page_size]
+
     data = []
-    for cust in paginated:
-        row = json.loads(cust.data)
-        row["id"] = cust.id
-        row["row_number"] = cust.row_number
-        data.append(row)
+    for row in paginated:
+        row_number = row.get("_row_number")
+        payload = {k: v for k, v in row.items() if k != "_row_number"}
+        payload["id"] = row_number
+        payload["row_number"] = row_number
+        data.append(payload)
 
     return CustomersListResponse(total=total, columns=col_schemas, data=data)
 
@@ -81,36 +91,30 @@ def list_customers(
 # ─── GET /customers/{id} ────────────────────────────────────
 
 @router.get("/customers/{row_number}", response_model=CustomerDetailResponse)
-def get_customer(row_number: int, db: Session = Depends(get_db)):
-    """Get a single customer by row_number (stable across syncs)."""
-    customer = db.query(Customer).filter(Customer.row_number == row_number).first()
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
+def get_customer(row_number: int):
+    """Get a single customer by row_number from Google Sheets."""
+    columns, rows = read_sheet_data()
+    col_schemas = [ColumnSchema.model_validate(c) for c in columns]
 
-    # Get column metadata
-    columns_db = db.query(ColumnMetadata).order_by(ColumnMetadata.column_index).all()
-    col_schemas = [ColumnSchema.model_validate(c) for c in columns_db]
+    for row in rows:
+        if row.get("_row_number") == row_number:
+            payload = {k: v for k, v in row.items() if k != "_row_number"}
+            payload["id"] = row_number
+            payload["row_number"] = row_number
+            return CustomerDetailResponse(columns=col_schemas, customer=payload)
 
-    # Parse customer data
-    data = json.loads(customer.data)
-    data["id"] = customer.id
-    data["row_number"] = customer.row_number
-
-    return CustomerDetailResponse(columns=col_schemas, customer=data)
+    raise HTTPException(status_code=404, detail="Customer not found")
 
 
 # ─── PATCH /customers/{row_number} ──────────────────────────
 
 @router.patch("/customers/{row_number}", response_model=CustomerDetailResponse)
-def update_customer(row_number: int, request: CustomerUpdateRequest, db: Session = Depends(get_db)):
-    """Update a customer's specific fields in Google Sheets and local DB."""
+def update_customer(row_number: int, request: CustomerUpdateRequest):
+    """Update a customer's specific fields directly in Google Sheets."""
     try:
-        updated_data = update_customer_in_sheet(db, row_number, request.updates)
-        
-        # Get column metadata for response
-        columns_db = db.query(ColumnMetadata).order_by(ColumnMetadata.column_index).all()
-        col_schemas = [ColumnSchema.model_validate(c) for c in columns_db]
-        
+        updated_data = update_customer_in_sheet(row_number, request.updates)
+        columns, _ = read_sheet_data()
+        col_schemas = [ColumnSchema.model_validate(c) for c in columns]
         return CustomerDetailResponse(columns=col_schemas, customer=updated_data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -122,9 +126,9 @@ def update_customer(row_number: int, request: CustomerUpdateRequest, db: Session
 # ─── GET /columns ────────────────────────────────────────────
 
 @router.get("/columns", response_model=ColumnsResponse)
-def get_columns(db: Session = Depends(get_db)):
+def get_columns():
     """Get all column metadata from the spreadsheet."""
-    columns = db.query(ColumnMetadata).order_by(ColumnMetadata.column_index).all()
+    columns, _ = read_sheet_data()
     return ColumnsResponse(
         total=len(columns),
         columns=[ColumnSchema.model_validate(c) for c in columns],
@@ -134,10 +138,27 @@ def get_columns(db: Session = Depends(get_db)):
 # ─── POST /sync ─────────────────────────────────────────────
 
 @router.post("/sync", response_model=SyncResponse)
-def manual_sync(db: Session = Depends(get_db)):
-    """Manually trigger a Google Sheet → DB sync."""
-    result = sync_sheet_to_db(db)
-    return SyncResponse(**result)
+def manual_sync():
+    """Validate current Google Sheet accessibility and shape."""
+    try:
+        columns, rows = read_sheet_data()
+        message = f"Loaded {len(rows)} rows with {len(columns)} columns from Google Sheets"
+        _record_sync("success", message, len(rows), len(columns))
+        return SyncResponse(
+            status="success",
+            message=message,
+            rows_synced=len(rows),
+            columns_synced=len(columns),
+        )
+    except Exception as e:
+        message = f"Sheet load failed: {str(e)}"
+        _record_sync("error", message, 0, 0)
+        return SyncResponse(
+            status="error",
+            message=message,
+            rows_synced=0,
+            columns_synced=0,
+        )
 
 
 # ─── GET /sync/logs ──────────────────────────────────────────
@@ -145,42 +166,29 @@ def manual_sync(db: Session = Depends(get_db)):
 @router.get("/sync/logs", response_model=List[SyncLogSchema])
 def get_sync_logs(
     limit: int = Query(10, ge=1, le=50),
-    db: Session = Depends(get_db),
 ):
-    """Get recent sync log entries."""
-    logs = (
-        db.query(SyncLog)
-        .order_by(desc(SyncLog.synced_at))
-        .limit(limit)
-        .all()
-    )
-    return [SyncLogSchema.model_validate(log) for log in logs]
+    """Get recent in-memory sheet sync checks."""
+    return _sync_logs[:limit]
 
 
 # ─── GET /health ─────────────────────────────────────────────
 
 @router.get("/health", response_model=HealthResponse)
-def health_check(db: Session = Depends(get_db)):
-    """Health check with database status."""
+def health_check():
+    """Health check for Google Sheets mode (no database)."""
     try:
-        total_customers = db.query(Customer).count()
-        total_columns = db.query(ColumnMetadata).count()
-        last_sync_log = (
-            db.query(SyncLog)
-            .order_by(desc(SyncLog.synced_at))
-            .first()
-        )
+        columns, rows = read_sheet_data()
 
         return HealthResponse(
             status="healthy",
-            database="connected",
-            last_sync=last_sync_log.synced_at if last_sync_log else None,
-            total_customers=total_customers,
-            total_columns=total_columns,
+            database="disabled_google_sheet_mode",
+            last_sync=_last_sync,
+            total_customers=len(rows),
+            total_columns=len(columns),
         )
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return HealthResponse(
             status="unhealthy",
-            database=f"error: {str(e)}",
+            database=f"sheet_error: {str(e)}",
         )

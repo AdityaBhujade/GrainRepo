@@ -1,67 +1,120 @@
-# Grain App — FastAPI Backend
+# Grain App
 
-Backend service that syncs customer data from a Google Sheet into SQL Server and serves it via REST API.
+This project now runs in **Google Sheets-only mode**.
+
+- No SQL database is required to start the backend.
+- Backend reads and writes customer data directly from Google Sheets.
+
+## Project Structure
+
+- `grain-backend/` -> FastAPI backend
+- `grain-app/` -> Expo React Native frontend
 
 ## Prerequisites
 
-- **Python 3.9+**
-- **SQL Server** with Windows Authentication (or configure SQL Auth in `.env`)
-- **ODBC Driver 17** for SQL Server
-- **Google Service Account** with Sheets API access
+- Python 3.10+
+- Node.js 18+
+- npm
+- Google Service Account JSON (`credentials.json`)
 
-## Quick Start
+## Backend Setup (Google Sheets-Only)
+
+Run from repo root:
 
 ```bash
-# 1. Create virtual environment
-python -m venv venv
-venv\Scripts\activate
+cd grain-backend
 
-# 2. Install dependencies
+# Create venv (first time only)
+python -m venv ..\.venv
+
+# Activate venv (Windows PowerShell)
+..\.venv\Scripts\Activate.ps1
+
+# Install dependencies
 pip install -r requirements.txt
+```
 
-# 3. Create the database in SQL Server Management Studio
-#    Run: CREATE DATABASE GrainAppDB
+Create/update `.env` in `grain-backend/`:
 
-# 4. Place your Google service account credentials.json in this folder
+```env
+GOOGLE_SHEET_ID=your_sheet_id
+GOOGLE_SHEET_TAB=Sheet1
+GOOGLE_CREDENTIALS_FILE=credentials.json
+HEADER_ROW=3
+DATA_START_ROW=5
+HOST=0.0.0.0
+PORT=8000
+```
 
-# 5. Start the server
+Place `credentials.json` inside `grain-backend/`.
+
+Start backend:
+
+```bash
+cd grain-backend
+..\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+Check:
+
+- API docs: `http://localhost:8000/docs`
+- Health: `http://localhost:8000/health`
+
+## Frontend Setup (Expo)
+
+In a new terminal:
+
+```bash
+cd grain-app
+npm install
+npm start
+```
+
+From Expo terminal:
+
+- Press `w` for web
+- Press `a` for Android emulator
+
+## Frontend API Base URL
+
+`grain-app/src/services/api.js` is configured as:
+
+- Web -> `http://localhost:8000`
+- Android emulator -> `http://10.0.2.2:8000`
+- iOS simulator -> `http://localhost:8000`
+
+For a physical device, replace host with your machine LAN IP.
+
+## Start Both Services (Quick Commands)
+
+Terminal 1 (backend):
+
+```bash
+cd grain-backend
+..\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Terminal 2 (frontend):
+
+```bash
+cd grain-app
+npm start
+```
+
+## Stop Services
+
+- In each running terminal, press `Ctrl + C`.
+
 ## API Endpoints
 
-| Method | Endpoint           | Description                         |
-|--------|--------------------|-------------------------------------|
-| GET    | `/customers`       | List all customers (with search)    |
-| GET    | `/customers/{id}`  | Single customer detail              |
-| GET    | `/columns`         | Column metadata from Row 4          |
-| POST   | `/sync`            | Manually trigger sheet sync         |
-| GET    | `/sync/logs`       | View sync history                   |
-| GET    | `/health`          | Health check + stats                |
-| GET    | `/docs`            | Swagger API docs (auto-generated)   |
-
-## Configuration (.env)
-
-```env
-DATABASE_URL=mssql+pyodbc://localhost/GrainAppDB?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes
-GOOGLE_SHEET_ID=your_sheet_id
-GOOGLE_SHEET_TAB=Sheet2
-HEADER_ROW=3
-DATA_START_ROW=5
-SYNC_INTERVAL_MINUTES=15
-```
-
-## Switching to PostgreSQL
-
-Just change `DATABASE_URL` in `.env`:
-```env
-DATABASE_URL=postgresql://user:password@host:5432/grainapp
-```
-And install the driver: `pip install psycopg2-binary`
-
-## Google Sheet Setup
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project → Enable **Google Sheets API** and **Google Drive API**
-3. Create a **Service Account** → Download JSON key as `credentials.json`
-4. Share your Google Sheet with the service account email (as Viewer)
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/customers` | List customers with optional search |
+| GET | `/customers/{row_number}` | Get one customer by sheet row number |
+| PATCH | `/customers/{row_number}` | Update selected fields in Google Sheet |
+| GET | `/columns` | Get column metadata |
+| POST | `/sync` | Validate/reload data from Google Sheet |
+| GET | `/sync/logs` | Recent in-memory sync checks |
+| GET | `/health` | Service and Google Sheet health |
