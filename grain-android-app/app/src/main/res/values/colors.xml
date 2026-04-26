@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="grain_primary">#6C5B7B</color>
+    <color name="grain_primary_dark">#4A4040</color>
+    <color name="grain_accent">#A8956B</color>
+</resources>

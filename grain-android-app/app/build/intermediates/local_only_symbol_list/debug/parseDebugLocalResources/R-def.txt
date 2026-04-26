@@ -1,0 +1,11 @@
+R_DEF: Internal format may change without notice
+local
+color grain_accent
+color grain_primary
+color grain_primary_dark
+drawable ic_launcher_foreground
+mipmap ic_launcher
+mipmap ic_launcher_round
+string app_name
+style Theme.GrainApp
+xml network_security_config
