@@ -12,7 +12,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
 
-private const val START_URL = "http://13.201.13.214/"
+private const val START_URL = "http://13.205.148.182/"
 
 class MainActivity : AppCompatActivity() {
 
